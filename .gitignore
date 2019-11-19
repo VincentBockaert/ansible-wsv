@@ -1,1 +1,1 @@
-./group_vars/db/vault.yml
+group_vars/db/vault.yml
