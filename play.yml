@@ -1,4 +1,8 @@
 ---
+#
+# Playbook targeting only the 'web' group
+#
+
 - name: chess webserver config
   hosts: web
   tasks:
@@ -10,8 +14,8 @@
   - name: apt | update
     apt:
       update_cache: 'yes'
-    notify:
-    - apt | upgrade # is always called due to a bug on apt's side always reporting "changed" despite no new packages
+      name: '*'
+      state: latest
 
   - name: apt | fail2ban
     apt:
@@ -21,30 +25,27 @@
     notify:
     - failban | config
     - start and enable fail2ban
-
+     
+#  - name: apt | apache2
+#    apt:
+#      name: ['apache2']
+#      state: latest
+#      install_recommends: 'yes'
+#    notify:
+#    - start and enable apache
+#    - ufw | http_port
+#    - ufw | https_port
       
-  - name: apt | apache2
-    apt:
-      name: ['apache2']
-      state: latest
-      install_recommends: 'yes'
-    notify:
-    - start and enable apache
-    - ufw | http_port
-    - ufw | https_port
-      
-  - name: apt | php
-    apt: 
-      name: ['php','php-mysql']
-      state: latest
-      install_recommends: 'yes'
+#  - name: apt | php
+#    apt: 
+#      name: ['php','php-mysql']
+#      state: latest
+#      install_recommends: 'yes'
   
   - name: apt | git
     apt: 
       name: git
       state: latest
-    notify:
-    - git | creds
   
   handlers:
   - name: start and enable fail2ban
@@ -74,15 +75,10 @@
       rule: allow
       port: '{{ http_port }}'
       proto: tcp
-  - name: apt | upgrade
-    apt:
-      name: "*"
-      state: latest
-  - name: git | creds
-    copy:
-      src: "{{ local_home }}.ssh/id_rsa_github_personal"
-      dest: "{{ remote_home }}.ssh/id_rsa_github_personal"
-      mode: '0600'
+
+#
+# Playbook targeting only the 'db' group
+#
 
 - name: install db requirements
   hosts: db
@@ -94,6 +90,10 @@
   - name: pip | pymysql
     pip:
       name: pymysql
+
+#
+# Playbook targeting both the 'web' and 'db' group
+#
 
 - name: get backups | db | website code
   hosts: web:db
@@ -115,11 +115,11 @@
   - name: mysql | dump
     mysql_db:
       state: dump
-      name: all
+      name: wsvdb
       login_user: "{{ mysql_user }}"
       login_password: "{{ mysql_password }}"
-      target: "{{ remote_home }}/alldbdump.sql"
-    notify:
+      target: "{{ remote_home }}/backupWSVDB.sql"
+    notify: # on success calls the fetch handler to also download and remove the backup file
     - fetch | mysqldump
     - remove | mysqldump
   
@@ -129,21 +129,21 @@
       src: "{{ remote_home }}/web.tgz"
       dest: "{{ local_home }}/web.tgz"
       flat: 'yes'
-  
+  # remove the archive from the web server
   - name: remove | archive
     file:
-      path: "{{ remote_home }}/www.zip"
+      path: "{{ remote_home }}/web.tgz"
       state: absent
-
+  # downloads the backed up sql dump
   - name: fetch | mysqldump
     fetch:
-      src: "{{ remote_home }}/alldbdump.sql"
-      dest: "{{ local_home }}/alldbdump.sql"
+      src: "{{ remote_home }}/backupWSVDB.sql"
+      dest: "{{ local_home }}/backupWSVDB.sql"
       flat: 'yes'
-  
+  # removes the mysqldump from the server
   - name: remove | mysqldump
     file:
-      path: "{{ remote_home }}/alldbdump.sql"
+      path: "{{ remote_home }}/backupWSVDB.sql"
       state: absent
   
 
